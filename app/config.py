@@ -23,6 +23,8 @@ class Settings:
     CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 800))
     CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
     TOP_K = int(os.getenv("TOP_K", 5))
+    NUM_CTX = int(os.getenv("NUM_CTX", 4096))
+    MAX_TOKENS = int(os.getenv("MAX_TOKENS", 512))
 
 
 settings = Settings()

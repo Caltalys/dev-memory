@@ -27,13 +27,12 @@ class LLMClient:
 
         # Options tối ưu cho CPU, ngăn hallucination
         self._options = {
-            "temperature": 0.2,      # Thấp hơn → ít suy diễn hơn
+            "temperature": 0.2,
             "top_p": 0.85,
-            "num_ctx": int(settings.__dict__.get("NUM_CTX", 2048)),
-            "num_predict": int(settings.__dict__.get("MAX_TOKENS", 512)),
-            "repeat_penalty": 1.3,   # Tăng lên để chống lặp
-            # QUAN TRọNG: Dừng lại khi gặp các tín hiệu bắt đầu fake conversation
-            "stop": ["User:", "Human:", "\nUser", "\nHuman", "Q:", "\nQ:", "Assistant:"],
+            "num_ctx": settings.NUM_CTX,
+            "num_predict": settings.MAX_TOKENS,
+            "repeat_penalty": 1.3,
+            "stop": ["\n\nUser:", "\n\nHuman:", "\n\nAssistant:"],
         }
 
     def _build_prompt(self, query: str, chunks: list, history: str = "") -> str:

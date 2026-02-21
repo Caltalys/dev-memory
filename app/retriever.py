@@ -1,8 +1,16 @@
 import chromadb
 import re
 from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
 from sentence_transformers import SentenceTransformer
 from app.config import settings, logger
+
+_VI_STOPWORDS = [
+    "là", "và", "hoặc", "nhưng", "mà", "thì", "của", "trong", "với", "cho",
+    "để", "nên", "không", "có", "một", "được", "này", "nào", "đó", "các",
+    "những", "khi", "nếu", "vì", "từ", "ra", "vẫn", "lên", "về", "bởi",
+    "nên", "hơn", "nhất", "hãy", "cũng", "đã", "sẽ", "đang", "rất", "như",
+]
 
 
 def _extract_date_filter(query: str) -> dict | None:
@@ -43,9 +51,9 @@ def _extract_date_filter(query: str) -> dict | None:
         elif unit in ("tuần", "tuan", "week", "weeks"):
             since = today - timedelta(weeks=n)
         elif unit in ("tháng", "thang", "month", "months"):
-            since = today - timedelta(days=n * 30)
+            since = today - relativedelta(months=n)
         else:  # năm / nam / year / years
-            since = today - timedelta(days=n * 365)
+            since = today - relativedelta(years=n)
         return {"date": {"$gte": str(since), "$lte": str(today)}}
 
     # ── Ngày cụ thể: dd/mm/yyyy hoặc dd-mm-yyyy (có hoặc không có "ngày") ────
@@ -75,12 +83,13 @@ class Retriever:
         """Load toàn bộ documents từ ChromaDB và build BM25 index."""
         try:
             import bm25s
-            all_data = self.collection.get(include=["documents"])
+            all_data = self.collection.get(include=["documents", "metadatas"])
             self._corpus = all_data.get("documents") or []
             self._corpus_ids = all_data.get("ids") or []
+            self._corpus_metadata = all_data.get("metadatas") or []
 
             if self._corpus:
-                corpus_tokens = bm25s.tokenize(self._corpus, stopwords="en")
+                corpus_tokens = bm25s.tokenize(self._corpus, stopwords=_VI_STOPWORDS)
                 self._bm25 = bm25s.BM25()
                 self._bm25.index(corpus_tokens)
                 logger.info(f"BM25 index built with {len(self._corpus)} documents.")
@@ -134,7 +143,7 @@ class Retriever:
             return []
         try:
             import bm25s
-            query_tokens = bm25s.tokenize([query], stopwords="en")
+            query_tokens = bm25s.tokenize([query], stopwords=_VI_STOPWORDS)
             results, scores = self._bm25.retrieve(query_tokens, k=min(top_k * 2, len(self._corpus)))
 
             items = []
@@ -143,10 +152,15 @@ class Retriever:
                 score = float(scores[0][i])
                 if score <= 0:
                     continue
+                meta = (
+                    self._corpus_metadata[doc_idx]
+                    if doc_idx < len(self._corpus_metadata)
+                    else {}
+                )
                 items.append({
                     "id": self._corpus_ids[doc_idx] if doc_idx < len(self._corpus_ids) else str(doc_idx),
                     "content": self._corpus[doc_idx],
-                    "metadata": {},
+                    "metadata": meta,
                     "score": score,
                     "method": "bm25",
                 })
