@@ -5,12 +5,14 @@ Personal Knowledge Base với RAG cục bộ — hỏi về kiến trúc, lỗi 
 ## Tính năng
 
 - **Hybrid Search** — Vector (ChromaDB + BGE-M3) + BM25 với Reciprocal Rank Fusion
+- **Date-Aware Retrieval** — Tự động lọc theo ngày khi hỏi "hôm nay", "2 tháng trước", `20/10/2025`, v.v.
 - **Embedding đa ngữ** — `BAAI/bge-m3` hỗ trợ tiếng Việt tốt
 - **Smart Chunking** — Chia chunk tôn trọng cấu trúc Markdown và code block
 - **Chat Memory** — SQLite lưu lịch sử, hỏi follow-up được
 - **Auto Re-index** — Watchdog tự động index khi note thay đổi
-- **UI Dark Mode** — Markdown render, nguồn trích dẫn, health indicator
+- **UI Dark Mode** — Markdown render, nguồn trích dẫn, health indicator (font Space Grotesk)
 - **Docker Ready** — Chạy 1 lệnh
+- **Agent Workflow** — `/create-dev-note` để tạo note kinh nghiệm theo template tự động
 
 ## Quick Start
 
@@ -65,9 +67,9 @@ python3 -m venv venv
 source venv/bin/activate          # Linux/macOS
 # venv\Scripts\activate.bat       # Windows
 
-# 3. Cài dependencies
+# 3. Cài dependencies (CPU-only — không cần GPU/CUDA)
 pip install -r requirements.txt
-# ⏳ Lần đầu mất 3-5 phút (tải PyTorch, ChromaDB...)
+# ⏳ Lần đầu mất 3-5 phút (tải PyTorch CPU, ChromaDB...)
 
 # 4. Cấu hình môi trường
 cp .env.example .env
@@ -114,8 +116,8 @@ dev-memory/
 ├── app/
 │   ├── config.py       # Settings từ .env
 │   ├── indexer.py      # Smart chunking + ChromaDB indexing
-│   ├── retriever.py    # Hybrid Search (Vector + BM25 + RRF)
-│   ├── llm.py          # Ollama client + Retry
+│   ├── retriever.py    # Hybrid Search + Date-Aware Filter
+│   ├── llm.py          # Ollama client + Retry + Optimized Prompt
 │   ├── memory.py       # Chat history SQLite
 │   ├── watcher.py      # Auto re-index khi note thay đổi
 │   └── main.py         # FastAPI server
@@ -125,7 +127,11 @@ dev-memory/
 │   ├── chroma_db/      # Vector index (auto-generated)
 │   └── dev_memory.db   # Chat history (auto-generated)
 ├── ui/
-│   └── index.html      # Web UI
+│   └── index.html      # Web UI (Space Grotesk)
+├── .agents/
+│   ├── rules.md        # Quy tắc AI agent cho project
+│   └── workflows/
+│       └── create-dev-note.md  # Workflow tạo note kinh nghiệm
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -138,6 +144,7 @@ dev-memory/
 |---|---|---|
 | `/` | GET | Web UI |
 | `/ask` | POST | Hỏi RAG |
+| `/ask/stream` | POST | Hỏi RAG — Streaming |
 | `/health` | GET | Trạng thái hệ thống |
 | `/reindex` | POST | Trigger re-index thủ công |
 | `/history/{session_id}` | GET | Lịch sử chat |
@@ -192,6 +199,9 @@ date: 2026-02-21
 | `externally-managed-environment` | Không dùng venv | Tạo venv trước: `python3 -m venv venv` |
 | `np.float_ removed` | NumPy 2.x không tương thích | `pip install "numpy>=1.24.0,<2.0"` |
 | `bm25s==0.1.8 not found` | Version bị yanked | Đã fix trong `requirements.txt` (dùng `0.1.10`) |
+| `AssertionError` khi `pip install` | pip version cũ | `pip install --upgrade pip` |
+| `No space left on device` | CUDA torch (~2GB) tải đầy disk | `requirements.txt` đã dùng CPU-only torch |
 | `Cannot connect to Ollama` | Ollama chưa chạy | `ollama serve` hoặc kiểm tra port 11434 |
 | Phản hồi chậm (>2 phút) | Model quá lớn cho CPU | Đổi sang `qwen2.5:1.5b` trong `.env` |
 | OOM / Server crash | RAM không đủ | Đổi model nhỏ hơn hoặc tắt bớt app |
+| Câu trả lời lẫn lộn | Model nhỏ, context nhiễu | Hỏi cụ thể hơn, thêm từ khóa thời gian |
