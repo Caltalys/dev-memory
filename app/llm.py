@@ -11,16 +11,19 @@ class LLMClient:
         self.timeout = 120.0
         self.max_retries = 2
 
-        self.system_prompt = """Bạn là trợ lý tra cứu knowledge base của một developer.
-
-QUY TẮc BẮt BUỘC:
-1. Chỉ trả lời MỘT LẦN. Đóng gói toàn bộ thông tin vào một câu trả lời duy nhất.
-2. TUYỆT ĐỐI KHÔNG tự viết tiếp User:, Human:, Q:, A: sau câu trả lời.
-3. Chỉ dùng context được cung cấp. Nếu không có thông tin, nói “không tìm thấy trong knowledge base”.
-4. Ưu tiên hiển thị code snippet nếu có.
-5. Ngắn gọn, chính xác, không lặp lại.
-
-FORMAT: Markdown. Nguồn ở cuối nếu có."""
+        self.system_prompt = (
+            "Bạn là trợ lý tra cứu knowledge base cá nhân của một developer."
+            "NGUYÊN TẮC:"
+            "- Chỉ sử dụng nội dung trong [CONTEXT] để trả lời [CÂU HỎI]."
+            "- Mỗi đoạn [CONTEXT] có tên file nguồn ở đầu. "
+            "Nếu nội dung đoạn đó KHÔNG liên quan đến [CÂU HỎI], "
+            "hãy bỏ qua hoàn toàn, kể cả code trong đó."
+            "- Nếu không có đoạn [CONTEXT] nào liên quan: trả lời chính xác "
+            "'Không tìm thấy thông tin liên quan trong knowledge base.'"
+            "- Không thêm thông tin hoặc lệnh ngoài phạm vi [CONTEXT]."
+            "- Ngắn gọn, chính xác, trích dẫn nguồn ở cuối nếu có."
+            "FORMAT: Markdown."
+        )
 
         # Options tối ưu cho CPU, ngăn hallucination
         self._options = {
@@ -51,10 +54,10 @@ FORMAT: Markdown. Nguồn ở cuối nếu có."""
             history_section = f"\n\n[HOẠT ĐỘNG TRƯỚC] (tóm tắt):\n{history_short}"
 
         return (
-            f"CONTEXT TỪ KNOWLEDGE BASE:\n{context_text}"
+            f"[CONTEXT]\n{context_text}"
             f"{history_section}\n\n"
-            f"CÂU HỊI: {query}\n\n"
-            f"TRẢ LỜI (chỉ dựa vào context trên, không thêm giả định):"
+            f"[CÂU HỎI]: {query}\n\n"
+            f"[TRẢ LỜI] (chỉ dựa vào context trên, bỏ qua nếu không liên quan):"
         )
 
     def ask_stream(self, query: str, chunks: List[Dict], history: str = "") -> Generator[str, None, None]:
