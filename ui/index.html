@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevMemory Pro</title>
+    <meta name="description" content="Personal Knowledge Base với RAG cục bộ">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { gray: { 850: '#18202e' } } } }
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+        }
+
+        .prose pre {
+            background: #0d1117;
+            padding: 12px 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid #30363d;
+            margin: 8px 0;
+        }
+
+        .prose code {
+            color: #58a6ff;
+            font-size: 0.85em;
+        }
+
+        .prose pre code {
+            color: #c9d1d9;
+        }
+
+        .prose p {
+            margin: 6px 0;
+            line-height: 1.65;
+        }
+
+        .prose ul,
+        .prose ol {
+            padding-left: 20px;
+            margin: 6px 0;
+        }
+
+        .prose li {
+            margin: 3px 0;
+        }
+
+        .prose h1,
+        .prose h2,
+        .prose h3 {
+            color: #e6edf3;
+            margin: 10px 0 6px;
+            font-weight: 700;
+        }
+
+        .prose blockquote {
+            border-left: 3px solid #58a6ff;
+            padding-left: 12px;
+            color: #8b949e;
+        }
+
+        .prose a {
+            color: #58a6ff;
+            text-decoration: underline;
+        }
+
+        .prose strong {
+            color: #e6edf3;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 3px;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .4;
+            }
+        }
+
+        .animate-pulse-text {
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+
+        #user-input:focus {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="px-4 py-3 border-b border-gray-700 bg-gray-850 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl">🧠</span>
+            <div>
+                <h1 class="text-lg font-bold text-blue-400 leading-tight">DevMemory Pro</h1>
+                <p class="text-xs text-gray-500">Local RAG · BGE-M3 · Qwen2.5</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div id="health-dot" class="w-2 h-2 rounded-full bg-gray-600"></div>
+            <span id="health-label" class="text-xs text-gray-500">Đang kết nối...</span>
+            <button id="reindex-btn" onclick="triggerReindex()"
+                class="text-xs px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition">
+                ↻ Re-index
+            </button>
+        </div>
+    </header>
+
+    <!-- Chat Area -->
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div id="welcome" class="text-center mt-16 text-gray-500 space-y-2">
+            <div class="text-4xl">🔍</div>
+            <p class="text-base font-medium text-gray-400">Hỏi về kiến trúc, lỗi code, hoặc bài học kinh nghiệm</p>
+            <p class="text-sm">Ví dụ: <span class="text-blue-400 cursor-pointer" onclick="setQuestion(this)">Cách xử lý
+                    lỗi N+1 trong SQLAlchemy?</span></p>
+            <p class="text-sm"><span class="text-blue-400 cursor-pointer" onclick="setQuestion(this)">Khi nào nên dùng
+                    Redis thay vì Memcached?</span></p>
+        </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="shrink-0 px-4 py-3 border-t border-gray-700 bg-gray-850">
+        <div class="max-w-3xl mx-auto">
+            <div class="flex gap-2">
+                <input type="text" id="user-input"
+                    class="flex-1 bg-gray-900 border border-gray-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 text-white placeholder-gray-500 transition"
+                    placeholder="Hỏi về notes của bạn..."
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuestion();}">
+                <button id="send-btn" onclick="sendQuestion()"
+                    class="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white px-5 py-3 rounded-xl font-bold text-sm transition">
+                    Gửi
+                </button>
+            </div>
+            <div class="flex items-center justify-between mt-2 px-1">
+                <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+                    <input type="checkbox" id="clear-memory" class="accent-blue-500">
+                    Xóa bộ nhớ phiên khi gửi
+                </label>
+                <span id="stats-label" class="text-xs text-gray-600"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = localStorage.getItem('dm_session') || null;
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // ── Health ──────────────────────────────────────────────────────────────────
+        async function checkHealth() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                const dot = document.getElementById('health-dot');
+                const lbl = document.getElementById('health-label');
+                if (data.ollama_connected) {
+                    dot.className = 'w-2 h-2 rounded-full bg-green-500';
+                    lbl.textContent = 'Online';
+                    lbl.className = 'text-xs text-green-400';
+                } else {
+                    dot.className = 'w-2 h-2 rounded-full bg-yellow-500';
+                    lbl.textContent = 'Ollama offline';
+                    lbl.className = 'text-xs text-yellow-400';
+                }
+                document.getElementById('stats-label').textContent =
+                    `${data.total_chunks} chunks · ${data.total_conversations} hội thoại`;
+            } catch (e) {
+                document.getElementById('health-label').textContent = 'Server offline';
+            }
+        }
+
+        // ── Helpers ─────────────────────────────────────────────────────────────────
+        function setQuestion(el) { userInput.value = el.textContent; userInput.focus(); }
+        function scrollToBottom() { chatContainer.scrollTop = chatContainer.scrollHeight; }
+        function setLoading(v) { sendBtn.disabled = v; userInput.readOnly = v; }
+        function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+        function hideWelcome() { const w = document.getElementById('welcome'); if (w) w.style.display = 'none'; }
+
+        function appendUserMsg(text) {
+            hideWelcome();
+            const div = document.createElement('div');
+            div.className = 'flex justify-end items-end';
+            div.innerHTML = `<div class="max-w-[80%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-3 shadow-lg text-sm">${escapeHtml(text)}</div>`;
+            chatContainer.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendAssistantBubble() {
+            hideWelcome();
+            const id = 'bubble-' + Date.now();
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = 'flex justify-start items-end';
+            div.innerHTML = `
+            <div class="max-w-[80%] bg-gray-800 border border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 shadow-lg">
+                <div id="${id}-text" class="prose prose-invert prose-sm text-gray-400 animate-pulse-text text-sm">🔍 Đang tìm kiếm...</div>
+                <div id="${id}-src" class="hidden mt-2 pt-2 border-t border-gray-700 flex flex-wrap gap-1"></div>
+                <div id="${id}-meta" class="mt-1 text-xs text-gray-600 hidden"></div>
+            </div>`;
+            chatContainer.appendChild(div);
+            scrollToBottom();
+            return id;
+        }
+
+        // ── Streaming Send ──────────────────────────────────────────────────────────
+        async function sendQuestion() {
+            const question = userInput.value.trim();
+            if (!question) return;
+
+            if (document.getElementById('clear-memory').checked && sessionId) {
+                await fetch(`/session/${sessionId}`, { method: 'DELETE' }).catch(() => { });
+                sessionId = null;
+                localStorage.removeItem('dm_session');
+                document.getElementById('clear-memory').checked = false;
+            }
+
+            appendUserMsg(question);
+            userInput.value = '';
+            setLoading(true);
+
+            const bubbleId = appendAssistantBubble();
+            const textEl = document.getElementById(`${bubbleId}-text`);
+            const srcEl = document.getElementById(`${bubbleId}-src`);
+            const metaEl = document.getElementById(`${bubbleId}-meta`);
+            let rawText = '';
+            const t0 = Date.now();
+
+            try {
+                const res = await fetch('/ask/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, session_id: sessionId, top_k: 3 }),
+                });
+                if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, { stream: true });
+                    const lines = buf.split('\n');
+                    buf = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const ev = JSON.parse(line.slice(6));
+
+                            if (ev.type === 'meta') {
+                                sessionId = ev.session_id;
+                                localStorage.setItem('dm_session', sessionId);
+                                if (ev.sources?.length) {
+                                    srcEl.innerHTML = ev.sources.map(s =>
+                                        `<span class="text-xs bg-gray-700 text-blue-300 px-2 py-0.5 rounded-full">📎 ${s}</span>`
+                                    ).join('');
+                                    srcEl.classList.remove('hidden');
+                                }
+                                textEl.classList.remove('animate-pulse-text', 'text-gray-400');
+                                textEl.className = 'text-gray-200 text-sm whitespace-pre-wrap leading-relaxed';
+                                textEl.textContent = '';
+
+                            } else if (ev.type === 'token') {
+                                rawText += ev.text;
+                                textEl.textContent = rawText;
+                                scrollToBottom();
+
+                            } else if (ev.type === 'done') {
+                                textEl.className = 'prose prose-invert prose-sm';
+                                textEl.innerHTML = marked.parse(rawText);
+                                metaEl.textContent = `${ev.chunks_found ?? ''} chunks · ${Date.now() - t0}ms`;
+                                metaEl.classList.remove('hidden');
+                                scrollToBottom();
+                            }
+                        } catch (_) { }
+                    }
+                }
+                // Fallback
+                if (rawText && !textEl.innerHTML.includes('<')) {
+                    textEl.className = 'prose prose-invert prose-sm';
+                    textEl.innerHTML = marked.parse(rawText);
+                }
+
+            } catch (err) {
+                textEl.className = 'text-sm';
+                textEl.innerHTML = `<p class="text-red-400">❌ ${escapeHtml(err.message)}</p>`;
+            } finally {
+                setLoading(false);
+                userInput.focus();
+            }
+        }
+
+        // ── Re-index ─────────────────────────────────────────────────────────────────
+        async function triggerReindex() {
+            const btn = document.getElementById('reindex-btn');
+            btn.textContent = '↻ Đang index...';
+            btn.disabled = true;
+            try {
+                await fetch('/reindex', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_reindex: true }),
+                });
+                await checkHealth();
+            } catch (_) { }
+            btn.textContent = '↻ Re-index';
+            btn.disabled = false;
+        }
+
+        // ── Init ──────────────────────────────────────────────────────────────────────
+        checkHealth();
+        setInterval(checkHealth, 30000);
+        userInput.focus();
+    </script>
+</body>
+
+</html>

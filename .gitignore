@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+
+# Env
+.env
+
+# Data (bảo vệ notes và DB — push lên private repo riêng)
+# Uncomment nếu muốn exclude data:
+# data/
+
+# ChromaDB index (tự rebuild được từ notes)
+data/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+*.egg-info/
+dist/
+build/
+
+# Docker
+*.tar
