@@ -1,6 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi==0.109.0
 uvicorn==0.27.0
 chromadb==0.4.22
+torch==2.10.0+cpu
+torchvision==0.25.0+cpu
+torchaudio==2.10.0+cpu
 sentence-transformers==2.3.1
 bm25s==0.1.10
 python-frontmatter==1.0.1
