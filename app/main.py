@@ -219,6 +219,20 @@ async def startup_event():
     if not llm_client.check_health():
         logger.warning("⚠️  Ollama not reachable. /ask will return error messages until Ollama starts.")
 
+    # Warmup dateparser — load locale data trước để tránh delay ở request đầu tiên
+    import asyncio
+    asyncio.get_event_loop().run_in_executor(None, _warmup_dateparser)
+
+
+def _warmup_dateparser():
+    """Tải trước locale data của dateparser ở background để tránh cold-start."""
+    try:
+        import dateparser
+        dateparser.parse("today")
+        logger.info("✅ dateparser warmed up.")
+    except Exception as e:
+        logger.warning(f"dateparser warmup failed: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
