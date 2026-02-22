@@ -1,7 +1,5 @@
 import chromadb
-import re
-from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
+from datetime import date
 from sentence_transformers import SentenceTransformer
 from app.config import settings, logger
 
@@ -16,58 +14,71 @@ _VI_STOPWORDS = [
 def _extract_date_filter(query: str) -> dict | None:
     """Trích xuất ChromaDB where-clause từ câu hỏi mang tính thời gian.
 
-    <p>Hỗ trợ các dạng:
+    <p>Sử dụng thư viện {@code dateparser} để hỗ trợ 200+ ngôn ngữ và các dạng
+    biểu đạt tự nhiên, bao gồm:
     <ul>
-        <li>Tương đối hiện tại: "hôm nay", "today"</li>
-        <li>Tương đối ngày qua: "hôm qua", "yesterday"</li>
-        <li>Khoảng thời gian: "2 tháng trước", "3 tuần trước", "10 ngày trước", "1 năm trước"</li>
-        <li>Cụ thể dd/mm/yyyy: "20/10/2025" hoặc "20-10-2025"</li>
-        <li>Cụ thể ISO yyyy-mm-dd: "2024-11-23"</li>
-        <li>Có tiền tố: "ngày 20/10/2025"</li>
+        <li>Tương đối: "hôm nay", "hôm qua", "today", "yesterday"</li>
+        <li>Khoảng thời gian: "2 tháng trước", "tuần trước", "3 weeks ago",
+            "hai tháng trước" (hỗ trợ số chữ)</li>
+        <li>Ngày cụ thể: "20/10/2025", "2024-11-23", "ngày 20 tháng 10 năm 2025"</li>
     </ul>
 
-    @param query Câu hỏi từ người dùng.
-    @return ChromaDB {@code where} dict nếu phát hiện từ khóa thời gian, {@code None} nếu không có.
+    <p>Áp dụng bộ lọc từ khóa để tránh false positive (ví dụ: "timeout 30 giây").
+
+    @param query Câu hỏi từ người dùng, có thể bằng bất kỳ ngôn ngữ nào.
+    @return ChromaDB {@code where} dict nếu phát hiện biểu đạt thời gian,
+            {@code None} nếu không có hoặc parse thất bại.
     """
+    import datetime
+    import dateparser
+
     q = query.lower()
     today = date.today()
 
-    # ── Tương đối: hôm nay / hôm qua ──────────────────────────────────────────
-    if any(kw in q for kw in ["hôm nay", "today", "hom nay"]):
-        return {"date": {"$eq": str(today)}}
-    if any(kw in q for kw in ["hôm qua", "yesterday", "hom qua"]):
-        return {"date": {"$eq": str(today - timedelta(days=1))}}
+    # ── Keyword gate: tránh false positive ────────────────────────────────────
+    # Chỉ thử parse khi có từ khóa thời gian rõ ràng
+    TIME_KEYWORDS = [
+        "hôm nay", "hôm qua", "hom nay", "hom qua",
+        "today", "yesterday",
+        "trước", "ago", "last ",
+        "tuần", "tháng", "năm", "ngày",
+        "week", "month", "year", "day",
+    ]
+    if not any(kw in q for kw in TIME_KEYWORDS):
+        return None
 
-    # ── Khoảng thời gian: "X (ngày|tuần|tháng|năm) trước" ────────────────────
-    m = re.search(
-        r"(\d+)\s*(ngày|tháng|tuần|năm|ngay|thang|tuan|nam|day|days|week|weeks|month|months|year|years)\s*(trước|ago)",
-        q,
-    )
-    if m:
-        n = int(m.group(1))
-        unit = m.group(2)
-        if unit in ("ngày", "ngay", "day", "days"):
-            since = today - timedelta(days=n)
-        elif unit in ("tuần", "tuan", "week", "weeks"):
-            since = today - timedelta(weeks=n)
-        elif unit in ("tháng", "thang", "month", "months"):
-            since = today - relativedelta(months=n)
-        else:  # năm / nam / year / years
-            since = today - relativedelta(years=n)
-        return {"date": {"$gte": str(since), "$lte": str(today)}}
+    # ── Xác định loại biểu đạt: range hay exact ───────────────────────────────
+    RANGE_KEYWORDS = [
+        "trước", "ago", "last ", "qua",
+        "tuần trước", "tháng trước", "năm trước",
+        "last week", "last month", "last year",
+    ]
+    is_range = any(kw in q for kw in RANGE_KEYWORDS)
 
-    # ── Ngày cụ thể: dd/mm/yyyy hoặc dd-mm-yyyy (có hoặc không có "ngày") ────
-    m = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", q)
-    if m:
-        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        return {"date": {"$eq": f"{y}-{mo:02d}-{d:02d}"}}
+    # ── Parse bằng dateparser ─────────────────────────────────────────────────
+    try:
+        parsed = dateparser.parse(
+            query,
+            settings={
+                "PREFER_DATES_FROM": "past",
+                "RETURN_AS_TIMEZONE_AWARE": False,
+                "RELATIVE_BASE": datetime.datetime.now(),
+            },
+        )
+    except Exception:
+        parsed = None
 
-    # ── Ngày cụ thể: yyyy-mm-dd ────────────────────────────────────────────────
-    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", q)
-    if m:
-        return {"date": {"$eq": f"{m.group(1)}-{m.group(2)}-{m.group(3)}"}}
+    if not parsed:
+        return None
 
-    return None
+    parsed_date_str = str(parsed.date())
+
+    if is_range:
+        # Range query: từ ngày đã parse đến hôm nay
+        return {"date": {"$gte": parsed_date_str, "$lte": str(today)}}
+    else:
+        # Exact query
+        return {"date": {"$eq": parsed_date_str}}
 
 
 class Retriever:
