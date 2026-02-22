@@ -4,23 +4,30 @@ project: ""
 date: YYYY-MM-DD
 ---
 
-# Tiêu đề Note
+# Tiêu đề Note (Ngắn gọn, mô tả đúng vấn đề)
 
 ## Bối cảnh (Context)
-<!-- Tại sao bạn gặp vấn đề này? Dự án nào? Stack gì? -->
+<!-- Dự án nào? Stack gì? Khi nào xảy ra? -->
 
-## Vấn đề (Problem)
-<!-- Mô tả rõ vấn đề gặp phải -->
+## Triệu chứng / Lỗi gặp phải
+<!-- Mô tả lỗi, stack trace, output bất thường -->
+
+```
+# Paste error message ở đây
+```
+
+## Nguyên nhân gốc rễ
+<!-- Tại sao xảy ra? Root cause là gì? -->
 
 ## Giải pháp (Solution)
-<!-- Giải pháp đã áp dụng -->
+<!-- Từng bước đã làm để fix -->
 
 ```language
-# Code snippet nếu có
+# Code snippet chính của giải pháp
 ```
 
 ## Bài học (Lesson Learned)
-<!-- Rút ra điều gì từ đây? -->
+<!-- Rút ra điều gì? Áp dụng được ở đâu khác? -->
 
 ## Tham khảo (References)
-<!-- Links, docs, PRs,... -->
+<!-- Links, docs, PRs, Stack Overflow,... -->

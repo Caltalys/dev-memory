@@ -1,4 +1,5 @@
 import os
+import re
 import hashlib
 import frontmatter
 import chromadb
@@ -6,6 +7,128 @@ from sentence_transformers import SentenceTransformer
 from pathlib import Path
 from app.config import settings, logger
 
+
+# ─── Section type classifier ──────────────────────────────────────────────────
+
+_SECTION_TYPES = {
+    "symptom":   ["lỗi", "triệu chứng", "bug", "error", "vấn đề", "problem", "issue", "exception"],
+    "root_cause": ["nguyên nhân", "tại sao", "cause", "reason", "why"],
+    "solution":  ["giải pháp", "cách fix", "solution", "xử lý", "khắc phục", "resolve", "fix"],
+    "code":      ["code", "snippet", "ví dụ", "example", "demo", "implementation"],
+    "lesson":    ["bài học", "lưu ý", "lesson", "note", "tip", "takeaway", "kết luận"],
+}
+
+
+def _classify_section(title: str) -> str:
+    """Phân loại section dựa trên tiêu đề heading.
+
+    @param title Tiêu đề section (không bao gồm ký tự #).
+    @return Chuỗi loại section, một trong: {@code symptom}, {@code root_cause},
+            {@code solution}, {@code code}, {@code lesson}, {@code general}.
+    """
+    t = title.lower()
+    for section_type, keywords in _SECTION_TYPES.items():
+        if any(k in t for k in keywords):
+            return section_type
+    return "general"
+
+
+# ─── Chunking strategies ──────────────────────────────────────────────────────
+
+def _split_by_headers(content: str) -> list[dict]:
+    """Tách nội dung markdown thành các section theo heading cấp 2 (##).
+
+    <p>Mỗi section được coi là một đơn vị tri thức độc lập. Section đầu tiên
+    (nội dung trước heading đầu tiên) được coi là phần giới thiệu với loại
+    {@code general}.
+
+    @param content Nội dung markdown đã loại bỏ frontmatter.
+    @return Danh sách dict chứa {@code title}, {@code content}, {@code type}.
+    """
+    # Tách theo dòng bắt đầu bằng ## (giữ nguyên phần trước heading đầu)
+    parts = re.split(r'\n(?=##\s)', content)
+    sections = []
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        lines = part.split('\n')
+        first_line = lines[0]
+
+        if first_line.startswith('##'):
+            title = re.sub(r'^#+\s*', '', first_line).strip()
+            body = '\n'.join(lines[1:]).strip()
+        else:
+            # Phần giới thiệu trước heading đầu tiên
+            title = "Giới thiệu"
+            body = part
+
+        if not body:
+            continue
+
+        # Nếu section quá dài, fallback sang fixed-size chunking cho section đó
+        sub_chunks = _split_large_section(title, body)
+        sections.extend(sub_chunks)
+
+    return sections
+
+
+def _split_large_section(title: str, body: str) -> list[dict]:
+    """Chia một section lớn thành các sub-chunk nếu vượt quá ngưỡng.
+
+    <p>Tôn trọng ranh giới code block khi cắt. Sử dụng {@code settings.CHUNK_SIZE}
+    làm ngưỡng tối đa cho mỗi sub-chunk.
+
+    @param title  Tiêu đề của section cha.
+    @param body   Nội dung thuần của section (không có dòng heading).
+    @return Danh sách dict, mỗi phần tử đại diện cho một sub-chunk.
+    """
+    section_type = _classify_section(title)
+    max_size = settings.CHUNK_SIZE * 2  # Generous limit: 2× chunk_size
+
+    if len(body) <= max_size:
+        return [{"title": title, "content": f"## {title}\n{body}", "type": section_type}]
+
+    # Cắt tại ranh giới dòng, tôn trọng code block
+    lines = body.split('\n')
+    chunks = []
+    current: list[str] = []
+    current_len = 0
+    in_code_block = False
+    part_idx = 0
+
+    for line in lines:
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+
+        if current_len + len(line) > max_size and current and not in_code_block:
+            sub_title = f"{title} (phần {part_idx + 1})"
+            chunks.append({
+                "title": sub_title,
+                "content": f"## {sub_title}\n" + '\n'.join(current),
+                "type": section_type,
+            })
+            current = []
+            current_len = 0
+            part_idx += 1
+
+        current.append(line)
+        current_len += len(line)
+
+    if current:
+        sub_title = f"{title} (phần {part_idx + 1})" if part_idx > 0 else title
+        chunks.append({
+            "title": sub_title,
+            "content": f"## {sub_title}\n" + '\n'.join(current),
+            "type": section_type,
+        })
+
+    return chunks
+
+
+# ─── Indexer ──────────────────────────────────────────────────────────────────
 
 class Indexer:
     def __init__(self):
@@ -20,43 +143,14 @@ class Indexer:
             f"Indexer initialized. Current chunks: {self.collection.count()}"
         )
 
-    def chunk_text(self, text: str) -> list[str]:
-        """Chia text thành chunks, cố gắng giữ nguyên code blocks."""
-        lines = text.split('\n')
-        chunks = []
-        current_chunk: list[str] = []
-        current_len = 0
-        in_code_block = False
-
-        for line in lines:
-            # Track code block boundaries
-            if line.strip().startswith('```'):
-                in_code_block = not in_code_block
-
-            line_len = len(line)
-
-            # Nếu vượt quá CHUNK_SIZE và không ở trong code block → flush chunk
-            if (
-                current_len + line_len > settings.CHUNK_SIZE
-                and current_chunk
-                and not in_code_block
-            ):
-                chunks.append('\n'.join(current_chunk))
-                # Overlap: giữ lại vài dòng cuối
-                overlap_lines = current_chunk[-3:] if len(current_chunk) > 3 else current_chunk[:]
-                current_chunk = overlap_lines
-                current_len = sum(len(l) for l in current_chunk)
-
-            current_chunk.append(line)
-            current_len += line_len
-
-        if current_chunk:
-            chunks.append('\n'.join(current_chunk))
-
-        return [c for c in chunks if c.strip()]
-
     def index_file(self, filepath: Path):
-        """Index một file markdown vào ChromaDB."""
+        """Index một file markdown vào ChromaDB theo chiến lược Semantic Sectioning.
+
+        <p>Mỗi heading cấp 2 ({@code ##}) được index thành một chunk riêng biệt
+        kèm metadata {@code section_type} để hỗ trợ filter theo loại nội dung.
+
+        @param filepath Đường dẫn tuyệt đối đến file markdown cần index.
+        """
         try:
             post = frontmatter.load(filepath)
             content = post.content
@@ -68,23 +162,26 @@ class Indexer:
             if existing["ids"]:
                 self.collection.delete(ids=existing["ids"])
 
-            chunks = self.chunk_text(content)
-            if not chunks:
+            sections = _split_by_headers(content)
+            if not sections:
                 logger.warning(f"No content in {filepath.name}, skipping.")
                 return
 
             ids = []
             docs = []
             metas = []
+            tags = metadata.get("tags", [])
+            tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
 
-            for i, chunk in enumerate(chunks):
+            for i, sec in enumerate(sections):
                 ids.append(f"{file_id}_{i}")
-                docs.append(chunk)
-                tags = metadata.get("tags", [])
+                docs.append(sec["content"])
                 metas.append({
                     "source_file": str(filepath),
                     "filename": filepath.name,
-                    "tags": ", ".join(tags) if isinstance(tags, list) else str(tags),
+                    "section_title": sec["title"],
+                    "section_type": sec["type"],
+                    "tags": tags_str,
                     "project": str(metadata.get("project", "unknown")),
                     "date": str(metadata.get("date", "")),
                 })
@@ -96,7 +193,10 @@ class Indexer:
                 documents=docs,
                 metadatas=metas,
             )
-            logger.info(f"✓ Indexed: {filepath.name} ({len(docs)} chunks)")
+            logger.info(
+                f"✓ Indexed: {filepath.name} "
+                f"({len(docs)} sections: {[s['type'] for s in sections]})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to index {filepath}: {e}")
