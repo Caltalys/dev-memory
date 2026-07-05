@@ -12,16 +12,19 @@ class LLMClient:
         self.max_retries = 2
 
         self.system_prompt = (
-            "Bạn là trợ lý tra cứu knowledge base cá nhân của một developer."
-            "NGUYÊN TẮC:"
-            "- Chỉ sử dụng nội dung trong [CONTEXT] để trả lời [CÂU HỎI]."
-            "- Mỗi đoạn [CONTEXT] có tên file nguồn ở đầu. "
-            "Nếu nội dung đoạn đó KHÔNG liên quan đến [CÂU HỎI], "
-            "hãy bỏ qua hoàn toàn, kể cả code trong đó."
+            "Bạn là trợ lý tra cứu knowledge base cá nhân của một developer.\n"
+            "NGUYÊN TẮC:\n"
+            "- Chỉ sử dụng nội dung trong [CONTEXT] để trả lời [CÂU HỎI].\n"
+            "- Mỗi đoạn [CONTEXT] có dạng '[n] tên-file (loại, ngày)'. "
+            "Nếu đoạn nào KHÔNG liên quan đến [CÂU HỎI], "
+            "hãy bỏ qua hoàn toàn, kể cả code trong đó.\n"
+            "- [HOẠT ĐỘNG TRƯỚC] chỉ để hiểu ngữ cảnh hội thoại, "
+            "KHÔNG dùng làm nguồn trả lời.\n"
             "- Nếu không có đoạn [CONTEXT] nào liên quan: trả lời chính xác "
-            "'Không tìm thấy thông tin liên quan trong knowledge base.'"
-            "- Không thêm thông tin hoặc lệnh ngoài phạm vi [CONTEXT]."
-            "- Ngắn gọn, chính xác, trích dẫn nguồn ở cuối nếu có."
+            "'Không tìm thấy thông tin liên quan trong knowledge base.'\n"
+            "- Không thêm thông tin hoặc lệnh ngoài phạm vi [CONTEXT].\n"
+            "- Ngắn gọn, chính xác. Cuối câu trả lời, liệt kê nguồn theo dạng "
+            "'Nguồn: [n] tên-file.md'.\n"
             "FORMAT: Markdown."
         )
 
@@ -31,9 +34,39 @@ class LLMClient:
             "top_p": 0.85,
             "num_ctx": settings.NUM_CTX,
             "num_predict": settings.MAX_TOKENS,
-            "repeat_penalty": 1.3,
+            "repeat_penalty": 1.1,
             "stop": ["\n\nUser:", "\n\nHuman:", "\n\nAssistant:"],
         }
+
+    @staticmethod
+    def _truncate_content(content: str, limit: int = 600) -> str:
+        """Cắt content tại ranh giới dòng và tự đóng code fence nếu bị cắt dở.
+
+        <p>Tránh cắt ngang ``` khiến phần còn lại của response bị coi là code
+        block, làm model "bịa" tiếp phần code đã bị cắt.
+        """
+        content = content.strip()
+        if len(content) <= limit:
+            return content
+
+        truncated = content[:limit].rsplit("\n", 1)[0]
+        if truncated.count("```") % 2 == 1:
+            truncated += "\n```"
+        return truncated
+
+    @staticmethod
+    def _truncate_history(history: str, limit: int = 200) -> str:
+        """Cắt history tại ranh giới lượt hội thoại (User:/Assistant:)."""
+        history = history.strip()
+        if len(history) <= limit:
+            return history
+
+        truncated = history[:limit]
+        for marker in ("\nUser:", "\nAssistant:"):
+            idx = truncated.rfind(marker)
+            if idx > 0:
+                return truncated[:idx]
+        return truncated
 
     def _build_prompt(self, query: str, chunks: list, history: str = "") -> str:
         """Xây dựng prompt ngắn gọn — truncate chunk để tiết kiệm context."""
@@ -41,16 +74,18 @@ class LLMClient:
         for i, chunk in enumerate(chunks, 1):
             meta = chunk.get("metadata", {})
             source = meta.get("filename", "unknown")
-            content = chunk.get("content", "")[:600].strip()
-            context_parts.append(f"[{i}] {source}:\n{content}")
+            note_type = meta.get("type", "unknown")
+            ts = meta.get("timestamp", "")
+            content = self._truncate_content(chunk.get("content", ""))
+            context_parts.append(f"[{i}] {source} ({note_type}, {ts}):\n{content}")
         context_text = "\n\n".join(context_parts)
 
         # Chỉ dùng history nếu thực sự có, giới hạn rất ngắn
         history_section = ""
         if history:
-            # Lấy tối đa 200 ky tự của history để không expand context
-            history_short = history.strip()[:200]
-            history_section = f"\n\n[HOẠT ĐỘNG TRƯỚC] (tóm tắt):\n{history_short}"
+            history_short = self._truncate_history(history)
+            if history_short:
+                history_section = f"\n\n[HOẠT ĐỘNG TRƯỚC] (tóm tắt):\n{history_short}"
 
         return (
             f"[CONTEXT]\n{context_text}"
