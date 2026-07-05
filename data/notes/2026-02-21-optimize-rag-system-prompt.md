@@ -1,7 +1,8 @@
 ---
+type: optimization
 tags: [llm, rag, prompt-engineering, ollama, python]
 project: "DevMemory Pro"
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Tối ưu System Prompt để giảm Hallucination trong RAG Pipeline

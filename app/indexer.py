@@ -1,11 +1,28 @@
 import os
 import re
+import datetime
 import hashlib
 import frontmatter
 import chromadb
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 from app.config import settings, logger
+
+# Tên file dành riêng, không index như concept document (theo quy ước OKF).
+_RESERVED_FILENAMES = {"template.md", "engineering_kb_template.md", "index.md", "log.md"}
+
+
+def _to_date_str(value) -> str:
+    """Chuẩn hoá giá trị `timestamp` (frontmatter) về chuỗi YYYY-MM-DD để filter.
+
+    <p>YAML parser tự parse `timestamp` thành {@code datetime.date} hoặc
+    {@code datetime.datetime}; hàm này quy về phần ngày dạng ISO 8601.
+    """
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return str(value)[:10]
 
 
 # ─── Section type classifier ──────────────────────────────────────────────────
@@ -183,7 +200,8 @@ class Indexer:
                     "section_type": sec["type"],
                     "tags": tags_str,
                     "project": str(metadata.get("project", "unknown")),
-                    "date": str(metadata.get("date", "")),
+                    "type": str(metadata.get("type", "unknown")),
+                    "timestamp": _to_date_str(metadata.get("timestamp", "")),
                 })
 
             embeddings = self.embedder.encode(docs, show_progress_bar=False).tolist()
@@ -206,7 +224,7 @@ class Indexer:
         md_files = list(settings.NOTES_DIR.rglob("*.md"))
         logger.info(f"Found {len(md_files)} markdown files.")
         for f in md_files:
-            if f.name.lower() != "template.md":
+            if f.name.lower() not in _RESERVED_FILENAMES:
                 self.index_file(f)
         logger.info(f"✅ Indexing complete. Total chunks: {self.collection.count()}")
 

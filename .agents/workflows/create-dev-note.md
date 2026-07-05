@@ -18,7 +18,10 @@ Sử dụng workflow này khi đã giải quyết xong một lỗi, một vấn 
 
 3. **Điền thông tin theo cấu trúc Semantic Sectioning**:
     - **QUAN TRỌNG**: Giữ đúng các Header `##` cấp 2 vì hệ thống sử dụng chúng để chia chunk và phân loại dữ liệu (`Triệu chứng`, `Nguyên nhân`, `Giải pháp`, `Bài học`).
-    - Cập nhật Frontmatter: `tags`, `project`, `date`.
+    - Cập nhật Frontmatter theo chuẩn [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf):
+        - `type` (bắt buộc): loại note, ví dụ `bugfix`, `optimization`, `architecture`, `feature`.
+        - `tags`, `project`: giữ như cũ.
+        - `timestamp` (ISO 8601, ví dụ `2026-07-05T00:00:00Z`) thay cho `date`.
     - Đảm bảo có Code Snippet trong các block ` ``` ` để hệ thống không cắt ngang mã nguồn.
 
 4. **Xác nhận**:

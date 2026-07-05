@@ -1,7 +1,8 @@
 ---
+type: bugfix
 tags: [python, fastapi, performance]
 project: dev-memory
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Xử Lý Lỗi N+1 Trong SQLAlchemy

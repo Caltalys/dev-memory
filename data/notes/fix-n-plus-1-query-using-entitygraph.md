@@ -1,7 +1,8 @@
 ---
+type: bugfix
 tags: [spring-boot, jpa, performance]
 project: "order-service"
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Fix N+1 Query với EntityGraph
