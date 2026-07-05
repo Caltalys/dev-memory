@@ -1,3 +1,5 @@
+> ⚠️ **ĐÃ THAY THẾ** — Code mẫu trong tài liệu này không khớp codebase thật (import `HybridRetriever`/`OllamaClient` không tồn tại; mô tả sai baseline chunking). Xem bản phân tích đã kiểm chứng tại [`ROADMAP_ANALYSIS_2026-07.md`](./ROADMAP_ANALYSIS_2026-07.md).
+
 # 🔬 Deep-Dive Analysis: 5 Tính Năng Chính
 
 **Ngày tạo**: 2026-07-05  

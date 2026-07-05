@@ -1,3 +1,5 @@
+> ⚠️ **ĐÃ THAY THẾ** — Báo cáo này chứa số liệu chưa kiểm chứng (ví dụ Langchain-Chatchat ghi 6.2K⭐, thực tế 38.3k⭐; một số repo tham chiếu gần như rỗng). Xem bản phân tích đã kiểm chứng tại [`ROADMAP_ANALYSIS_2026-07.md`](./ROADMAP_ANALYSIS_2026-07.md).
+
 # 📊 Báo Cáo Phân Tích & Đề Xuất Bổ Sung Tính Năng DevMemory Pro
 
 **Ngày tạo**: 2026-07-05  
