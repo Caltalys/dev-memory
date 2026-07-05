@@ -1,7 +1,8 @@
 ---
+type: bugfix
 tags: []
 project: ""
-date: YYYY-MM-DD
+timestamp: YYYY-MM-DDT00:00:00Z
 ---
 
 # Tiêu đề Note (Ngắn gọn, mô tả đúng vấn đề)

@@ -170,13 +170,14 @@ curl -X POST http://localhost:8000/reindex \
 
 ## Format Note (.md)
 
-Dùng template `data/notes/template.md` để tạo note chuẩn:
+Frontmatter theo hướng tương thích với [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) — markdown + YAML frontmatter, `type` là field bắt buộc, `timestamp` dùng ISO 8601. Dùng template `data/notes/template.md` để tạo note chuẩn:
 
 ```markdown
 ---
+type: bugfix
 tags: [python, fastapi]
 project: my-project
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Tiêu đề Note

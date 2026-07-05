@@ -1,7 +1,8 @@
 ---
+type: architecture
 tags: [spring-boot, configuration, properties]
 project: "microservice-auth"
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Quản lý cấu hình với @ConfigurationProperties

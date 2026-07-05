@@ -75,10 +75,10 @@ def _extract_date_filter(query: str) -> dict | None:
 
     if is_range:
         # Range query: từ ngày đã parse đến hôm nay
-        return {"date": {"$gte": parsed_date_str, "$lte": str(today)}}
+        return {"timestamp": {"$gte": parsed_date_str, "$lte": str(today)}}
     else:
         # Exact query
-        return {"date": {"$eq": parsed_date_str}}
+        return {"timestamp": {"$eq": parsed_date_str}}
 
 
 class Retriever:

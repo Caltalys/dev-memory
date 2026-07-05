@@ -1,7 +1,8 @@
 ---
+type: bugfix
 tags: [pip, python, troubleshooting, cuda, torch]
 project: "DevMemory Pro"
-date: 2026-02-21
+timestamp: 2026-02-21T00:00:00Z
 ---
 
 # Fix Pip AssertionError & No Space Left (CUDA/Torch Issue)
