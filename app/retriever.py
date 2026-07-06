@@ -1,5 +1,6 @@
 import chromadb
 from datetime import date
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from app.config import settings, logger
 
@@ -207,6 +208,74 @@ class Retriever:
         # Sort by fused score
         sorted_ids = sorted(score_map.keys(), key=lambda x: score_map[x], reverse=True)
         return [meta_map[doc_id] for doc_id in sorted_ids]
+
+    def get_note_connections(self, filename: str, top_k: int = 5) -> dict:
+        """Trả về các kết nối tri thức của một note: outgoing / backlinks / related.
+
+        <ul>
+            <li>{@code outgoing}: các note mà note này liên kết tới
+                (wikilink/OKF link, từ metadata {@code links})</li>
+            <li>{@code backlinks}: các note khác liên kết tới note này</li>
+            <li>{@code related}: các note tương đồng ngữ nghĩa, tính bằng
+                embedding có sẵn trong ChromaDB — không cần model mới</li>
+        </ul>
+
+        @param filename Tên file note (ví dụ {@code sqlalchemy-n-plus-1.md}).
+        @param top_k    Số related note tối đa.
+        @return Dict với 3 khóa {@code outgoing}, {@code backlinks}, {@code related}.
+        """
+        stem = Path(filename).stem
+        result = {"outgoing": [], "backlinks": [], "related": []}
+
+        # Chunks của chính note này (kèm embeddings để tìm related)
+        own = self.collection.get(
+            where={"filename": filename},
+            include=["embeddings", "metadatas"],
+        )
+        own_metas = own.get("metadatas") or []
+        if not own_metas:
+            return result
+
+        # ── Outgoing: từ metadata links (giống nhau trên mọi chunk) ───────────
+        links_str = own_metas[0].get("links", "")
+        result["outgoing"] = [s for s in links_str.split(",") if s]
+
+        # ── Backlinks: quét metadata toàn corpus (mỗi file 1 lần) ─────────────
+        all_meta = self.collection.get(include=["metadatas"]).get("metadatas") or []
+        seen_files = set()
+        for meta in all_meta:
+            fname = meta.get("filename", "")
+            if fname == filename or fname in seen_files:
+                continue
+            seen_files.add(fname)
+            file_links = meta.get("links", "").split(",")
+            if stem in file_links:
+                result["backlinks"].append(fname)
+
+        # ── Related: similarity trên embeddings sẵn có ────────────────────────
+        own_embeddings = own.get("embeddings")
+        if own_embeddings is not None and len(own_embeddings) > 0:
+            query_result = self.collection.query(
+                query_embeddings=list(own_embeddings),
+                n_results=min(top_k * 3, max(self.collection.count(), 1)),
+                include=["metadatas", "distances"],
+            )
+            # Gom điểm tốt nhất theo từng file, loại chính nó
+            best_scores: dict[str, float] = {}
+            for chunk_idx in range(len(query_result["ids"])):
+                for i, meta in enumerate(query_result["metadatas"][chunk_idx]):
+                    fname = meta.get("filename", "")
+                    if fname == filename:
+                        continue
+                    score = 1.0 - query_result["distances"][chunk_idx][i]
+                    if score > best_scores.get(fname, -1.0):
+                        best_scores[fname] = score
+            result["related"] = [
+                {"filename": f, "score": round(s, 4)}
+                for f, s in sorted(best_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+            ]
+
+        return result
 
     def retrieve(self, query: str, top_k: int = None) -> list[dict]:
         """Hybrid search: Vector + BM25 với Reciprocal Rank Fusion.

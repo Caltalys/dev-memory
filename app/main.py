@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -173,6 +173,48 @@ async def reindex(background_tasks: BackgroundTasks, req: ReindexRequest = Reind
 def _do_reindex():
     indexer.index_all()
     retriever.reload_corpus()
+
+
+@app.get("/related/{filename}")
+async def get_related(filename: str, top_k: int = 5):
+    """Kết nối tri thức của một note: outgoing links, backlinks, related notes."""
+    connections = retriever.get_note_connections(filename, top_k=top_k)
+    if not connections["outgoing"] and not connections["backlinks"] and not connections["related"]:
+        # Phân biệt "không có kết nối" với "file không tồn tại trong index"
+        existing = indexer.collection.get(where={"filename": filename}, limit=1)
+        if not existing["ids"]:
+            raise HTTPException(status_code=404, detail=f"Note '{filename}' chưa được index.")
+    return {"filename": filename, **connections}
+
+
+@app.post("/ingest")
+async def ingest_document(file: UploadFile = File(...)):
+    """Upload PDF/DOCX/... → convert sang markdown kèm frontmatter OKF → index."""
+    import tempfile
+    from app.ingest import ingest_file, SUPPORTED_EXTENSIONS
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Định dạng '{suffix}' không được hỗ trợ. Hỗ trợ: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        dest = ingest_file(tmp_path, original_name=file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    # Index ngay để dùng được luôn (watcher cũng sẽ bắt sự kiện nhưng upsert là idempotent)
+    indexer.index_file(dest)
+    retriever.reload_corpus()
+    return {"status": "ingested", "note": dest.name, "chunks": indexer.collection.count()}
 
 
 @app.get("/history/{session_id}")

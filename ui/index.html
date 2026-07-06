@@ -288,7 +288,7 @@
                                 localStorage.setItem('dm_session', sessionId);
                                 if (ev.sources?.length) {
                                     srcEl.innerHTML = ev.sources.map(s =>
-                                        `<span class="text-xs bg-gray-700 text-blue-300 px-2 py-0.5 rounded-full">📎 ${s}</span>`
+                                        `<span class="text-xs bg-gray-700 text-blue-300 px-2 py-0.5 rounded-full cursor-pointer hover:bg-gray-600" title="Xem note liên quan" onclick="showRelated(this, '${s.replace(/'/g, "\\'")}')">📎 ${s}</span>`
                                     ).join('');
                                     srcEl.classList.remove('hidden');
                                 }
@@ -323,6 +323,46 @@
             } finally {
                 setLoading(false);
                 userInput.focus();
+            }
+        }
+
+        // ── Related notes ─────────────────────────────────────────────────────────────
+        async function showRelated(chipEl, filename) {
+            // Toggle: nếu panel đã mở cho chip này thì đóng
+            const existing = chipEl.parentElement.querySelector('.related-panel');
+            if (existing) {
+                const wasForThis = existing.dataset.file === filename;
+                existing.remove();
+                if (wasForThis) return;
+            }
+
+            const panel = document.createElement('div');
+            panel.className = 'related-panel w-full mt-1 text-xs text-gray-400 bg-gray-800 rounded-lg px-3 py-2';
+            panel.dataset.file = filename;
+            panel.textContent = '⏳ Đang tìm note liên quan...';
+            chipEl.parentElement.appendChild(panel);
+
+            try {
+                const res = await fetch(`/related/${encodeURIComponent(filename)}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                const parts = [];
+                if (data.related?.length) {
+                    parts.push('<span class="text-gray-500">Liên quan:</span> ' +
+                        data.related.map(r => `<span class="text-blue-300">${escapeHtml(r.filename)}</span>`).join(', '));
+                }
+                if (data.backlinks?.length) {
+                    parts.push('<span class="text-gray-500">Backlinks:</span> ' +
+                        data.backlinks.map(escapeHtml).join(', '));
+                }
+                if (data.outgoing?.length) {
+                    parts.push('<span class="text-gray-500">Liên kết tới:</span> ' +
+                        data.outgoing.map(escapeHtml).join(', '));
+                }
+                panel.innerHTML = parts.length ? parts.join('<br>') : 'Không có kết nối nào.';
+            } catch (err) {
+                panel.textContent = `❌ ${err.message}`;
             }
         }
 

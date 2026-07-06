@@ -98,6 +98,32 @@ def ask(question: str, top_k: int = 3) -> str:
 
 
 @mcp.tool()
+def related_notes(filename: str, top_k: int = 5) -> str:
+    """Tìm các note liên quan đến một note: outgoing links, backlinks, và
+    note tương đồng ngữ nghĩa (dựa trên embedding có sẵn).
+
+    Args:
+        filename: Tên file note, ví dụ "sqlalchemy-n-plus-1.md".
+        top_k: Số related note tối đa (mặc định 5).
+    """
+    retriever = _get_rag()
+    conn = retriever.get_note_connections(filename, top_k=top_k)
+    lines = [f"Kết nối của {filename}:"]
+    lines.append(
+        "- Outgoing links: " + (", ".join(conn["outgoing"]) if conn["outgoing"] else "(không có)")
+    )
+    lines.append(
+        "- Backlinks: " + (", ".join(conn["backlinks"]) if conn["backlinks"] else "(không có)")
+    )
+    if conn["related"]:
+        lines.append("- Related (semantic):")
+        lines.extend(f"    {r['filename']} (score: {r['score']})" for r in conn["related"])
+    else:
+        lines.append("- Related (semantic): (không có)")
+    return "\n".join(lines)
+
+
+@mcp.tool()
 def list_notes(tag: str = "", limit: int = 50) -> str:
     """Liệt kê các note trong knowledge base kèm metadata OKF.
 
