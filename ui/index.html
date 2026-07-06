@@ -7,7 +7,12 @@
     <title>DevMemory Pro</title>
     <meta name="description" content="Personal Knowledge Base với RAG cục bộ">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"
+        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"
+        integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a"
+        crossorigin="anonymous"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
@@ -123,14 +128,14 @@
     <!-- Header -->
     <header class="px-4 py-3 border-b border-gray-700 bg-gray-850 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-3">
-            <span class="text-2xl">🧠</span>
+            <span class="text-2xl" role="img" aria-label="Bộ nhớ">🧠</span>
             <div>
                 <h1 class="text-lg font-bold text-blue-400 leading-tight">DevMemory Pro</h1>
                 <p class="text-xs text-gray-500">Local RAG · BGE-M3 · Qwen2.5</p>
             </div>
         </div>
         <div class="flex items-center gap-3">
-            <div id="health-dot" class="w-2 h-2 rounded-full bg-gray-600"></div>
+            <div id="health-dot" class="w-2 h-2 rounded-full bg-gray-600" role="status" aria-label="Trạng thái kết nối"></div>
             <span id="health-label" class="text-xs text-gray-500">Đang kết nối...</span>
             <button id="reindex-btn" onclick="triggerReindex()"
                 class="text-xs px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition">
@@ -140,7 +145,7 @@
     </header>
 
     <!-- Chat Area -->
-    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4" aria-live="polite">
         <div id="welcome" class="text-center mt-16 text-gray-500 space-y-2">
             <div class="text-4xl">🔍</div>
             <p class="text-base font-medium text-gray-400">Hỏi về kiến trúc, lỗi code, hoặc bài học kinh nghiệm</p>
@@ -209,6 +214,8 @@
         function setLoading(v) { sendBtn.disabled = v; userInput.readOnly = v; }
         function escapeHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
         function hideWelcome() { const w = document.getElementById('welcome'); if (w) w.style.display = 'none'; }
+        function renderMarkdown(text) { return DOMPurify.sanitize(marked.parse(text)); }
+        let bubbleCounter = 0;
 
         function appendUserMsg(text) {
             hideWelcome();
@@ -221,7 +228,7 @@
 
         function appendAssistantBubble() {
             hideWelcome();
-            const id = 'bubble-' + Date.now();
+            const id = 'bubble-' + (bubbleCounter++);
             const div = document.createElement('div');
             div.id = id;
             div.className = 'flex justify-start items-end';
@@ -287,9 +294,15 @@
                                 sessionId = ev.session_id;
                                 localStorage.setItem('dm_session', sessionId);
                                 if (ev.sources?.length) {
-                                    srcEl.innerHTML = ev.sources.map(s =>
-                                        `<span class="text-xs bg-gray-700 text-blue-300 px-2 py-0.5 rounded-full cursor-pointer hover:bg-gray-600" title="Xem note liên quan" onclick="showRelated(this, '${s.replace(/'/g, "\\'")}')">📎 ${s}</span>`
-                                    ).join('');
+                                    srcEl.innerHTML = '';
+                                    ev.sources.forEach(s => {
+                                        const chip = document.createElement('span');
+                                        chip.className = 'text-xs bg-gray-700 text-blue-300 px-2 py-0.5 rounded-full cursor-pointer hover:bg-gray-600';
+                                        chip.title = 'Xem note liên quan';
+                                        chip.textContent = `📎 ${s}`;
+                                        chip.addEventListener('click', () => showRelated(chip, s));
+                                        srcEl.appendChild(chip);
+                                    });
                                     srcEl.classList.remove('hidden');
                                 }
                                 textEl.classList.remove('animate-pulse-text', 'text-gray-400');
@@ -303,7 +316,7 @@
 
                             } else if (ev.type === 'done') {
                                 textEl.className = 'prose prose-invert prose-sm';
-                                textEl.innerHTML = marked.parse(rawText);
+                                textEl.innerHTML = renderMarkdown(rawText);
                                 metaEl.textContent = `${ev.chunks_found ?? ''} chunks · ${Date.now() - t0}ms`;
                                 metaEl.classList.remove('hidden');
                                 scrollToBottom();
@@ -314,7 +327,7 @@
                 // Fallback
                 if (rawText && !textEl.innerHTML.includes('<')) {
                     textEl.className = 'prose prose-invert prose-sm';
-                    textEl.innerHTML = marked.parse(rawText);
+                    textEl.innerHTML = renderMarkdown(rawText);
                 }
 
             } catch (err) {

@@ -125,6 +125,7 @@ class LLMClient:
             "prompt": prompt,
             "system": self.system_prompt,
             "stream": True,
+            "think": False,
             "options": self._options,
         }
 

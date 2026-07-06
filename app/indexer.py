@@ -189,7 +189,10 @@ class Indexer:
     def __init__(self):
         logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL}")
         self.embedder = SentenceTransformer(settings.EMBEDDING_MODEL)
-        self.client = chromadb.PersistentClient(path=settings.CHROMA_DIR)
+        self.client = chromadb.PersistentClient(
+            path=settings.CHROMA_DIR,
+            settings=chromadb.config.Settings(anonymized_telemetry=False),
+        )
         self.collection = self.client.get_or_create_collection(
             name="dev_notes_pro",
             metadata={"hnsw:space": "cosine"}
