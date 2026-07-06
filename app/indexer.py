@@ -6,10 +6,7 @@ import frontmatter
 import chromadb
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
-from app.config import settings, logger
-
-# Tên file dành riêng, không index như concept document (theo quy ước OKF).
-_RESERVED_FILENAMES = {"template.md", "engineering_kb_template.md", "index.md", "log.md"}
+from app.config import settings, logger, RESERVED_FILENAMES
 
 
 def _to_date_str(value) -> str:
@@ -23,6 +20,47 @@ def _to_date_str(value) -> str:
     if isinstance(value, datetime.date):
         return value.isoformat()
     return str(value)[:10]
+
+
+# ─── Link extraction (wikilink + OKF cross-link) ─────────────────────────────
+
+_WIKILINK_RE = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]')
+_MD_LINK_RE = re.compile(r'\[[^\]]*\]\(([^)\s]+\.md)\)')
+
+
+def _extract_links(content: str) -> list[str]:
+    """Trích xuất các liên kết nội bộ giữa các note từ nội dung markdown.
+
+    <p>Hỗ trợ 2 dạng liên kết:
+    <ul>
+        <li>Wikilink kiểu Obsidian: {@code [[note]]}, {@code [[note|alias]]},
+            {@code [[note#section]]}</li>
+        <li>Markdown link nội bộ kiểu OKF: {@code [text](/notes/note.md)},
+            {@code [text](./note.md)} — bỏ qua URL http(s)</li>
+    </ul>
+
+    <p>Mỗi target được chuẩn hoá về tên file không đuôi (stem) để so khớp
+    độc lập với đường dẫn thư mục.
+
+    @param content Nội dung markdown (không bao gồm frontmatter).
+    @return Danh sách stem của các note được liên kết, đã khử trùng lặp,
+            giữ nguyên thứ tự xuất hiện.
+    """
+    targets: list[str] = []
+
+    for match in _WIKILINK_RE.finditer(content):
+        target = match.group(1).strip()
+        if target:
+            targets.append(Path(target).stem)
+
+    for match in _MD_LINK_RE.finditer(content):
+        target = match.group(1).strip()
+        if target.startswith(("http://", "https://")):
+            continue
+        targets.append(Path(target).stem)
+
+    # Khử trùng lặp, giữ thứ tự
+    return list(dict.fromkeys(targets))
 
 
 # ─── Section type classifier ──────────────────────────────────────────────────
@@ -189,6 +227,9 @@ class Indexer:
             metas = []
             tags = metadata.get("tags", [])
             tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
+            # Liên kết nội bộ (wikilink/OKF) — trích từ toàn bộ note,
+            # gắn vào mọi chunk để truy vấn backlink theo file
+            links_str = ",".join(_extract_links(content))
 
             for i, sec in enumerate(sections):
                 ids.append(f"{file_id}_{i}")
@@ -202,6 +243,7 @@ class Indexer:
                     "project": str(metadata.get("project", "unknown")),
                     "type": str(metadata.get("type", "unknown")),
                     "timestamp": _to_date_str(metadata.get("timestamp", "")),
+                    "links": links_str,
                 })
 
             embeddings = self.embedder.encode(docs, show_progress_bar=False).tolist()
@@ -220,11 +262,19 @@ class Indexer:
             logger.error(f"Failed to index {filepath}: {e}")
 
     def index_all(self):
-        """Index tất cả file markdown trong NOTES_DIR."""
-        md_files = list(settings.NOTES_DIR.rglob("*.md"))
+        """Index tất cả file markdown trong NOTES_DIR.
+
+        <p>Bỏ qua file trong thư mục ẩn (ví dụ {@code .obsidian/},
+        {@code .trash/}, {@code .git/}) để tương thích khi trỏ
+        {@code NOTES_DIR} vào một Obsidian vault.
+        """
+        md_files = [
+            f for f in settings.NOTES_DIR.rglob("*.md")
+            if not any(part.startswith(".") for part in f.relative_to(settings.NOTES_DIR).parts)
+        ]
         logger.info(f"Found {len(md_files)} markdown files.")
         for f in md_files:
-            if f.name.lower() not in _RESERVED_FILENAMES:
+            if f.name.lower() not in RESERVED_FILENAMES:
                 self.index_file(f)
         logger.info(f"✅ Indexing complete. Total chunks: {self.collection.count()}")
 

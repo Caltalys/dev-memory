@@ -29,6 +29,9 @@ class Settings:
 
 settings = Settings()
 
+# Tên file dành riêng, không index như concept document (theo quy ước OKF).
+RESERVED_FILENAMES = {"template.md", "engineering_kb_template.md", "index.md", "log.md"}
+
 # Tạo thư mục nếu chưa tồn tại
 settings.NOTES_DIR.mkdir(parents=True, exist_ok=True)
 Path(settings.CHROMA_DIR).mkdir(parents=True, exist_ok=True)

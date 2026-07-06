@@ -3,7 +3,7 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent, FileDeletedEvent
 from typing import Set
-from app.config import settings, logger
+from app.config import settings, logger, RESERVED_FILENAMES
 from app.indexer import Indexer
 
 
@@ -20,7 +20,7 @@ class NoteFileHandler(FileSystemEventHandler):
         path_obj = Path(path)
         if path_obj.suffix.lower() != ".md":
             return False
-        if path_obj.name.lower() == "template.md":
+        if path_obj.name.lower() in RESERVED_FILENAMES:
             return False
         if any(part.startswith(".") for part in path_obj.parts):
             return False
