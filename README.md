@@ -10,6 +10,12 @@ Personal Knowledge Base với RAG cục bộ — hỏi về kiến trúc, lỗi 
 - **Smart Chunking** — Chia chunk tôn trọng cấu trúc Markdown và code block
 - **Chat Memory** — SQLite lưu lịch sử, hỏi follow-up được
 - **Auto Re-index** — Watchdog tự động index khi note thay đổi
+- **MCP Server** — Dùng DevMemory làm memory backend cho Claude Code/Claude Desktop/Cursor
+- **Wikilink & OKF Cross-link** — Parse `[[note]]` và `[text](/note.md)`, lưu vào metadata (nền tảng cho backlinks/graph)
+- **Obsidian Compatible** — Trỏ `NOTES_DIR` vào Obsidian vault, tự bỏ qua `.obsidian/`
+- **Related Notes & Backlinks** — Tìm note liên quan bằng embedding sẵn có; click nguồn trích dẫn trong UI để xem
+- **Ingest PDF/DOCX** — Upload tài liệu, tự convert sang markdown + frontmatter OKF (markitdown)
+- **Multi-LLM** — Ollama (mặc định) hoặc bất kỳ OpenAI-compatible API (LM Studio, vLLM, OpenRouter...)
 - **UI Dark Mode** — Markdown render, nguồn trích dẫn, health indicator (font Space Grotesk)
 - **Docker Ready** — Chạy 1 lệnh
 - **Agent Workflow** — `/create-dev-note` để tạo note kinh nghiệm theo template tự động
@@ -120,6 +126,7 @@ dev-memory/
 │   ├── llm.py          # Ollama client + Retry + Optimized Prompt
 │   ├── memory.py       # Chat history SQLite
 │   ├── watcher.py      # Auto re-index khi note thay đổi
+│   ├── mcp_server.py   # MCP server cho Claude/Cursor (python -m app.mcp_server)
 │   └── main.py         # FastAPI server
 ├── data/
 │   ├── notes/          # 📝 ĐẶT MARKDOWN NOTES VÀO ĐÂY
@@ -147,6 +154,8 @@ dev-memory/
 | `/ask/stream` | POST | Hỏi RAG — Streaming |
 | `/health` | GET | Trạng thái hệ thống |
 | `/reindex` | POST | Trigger re-index thủ công |
+| `/related/{filename}` | GET | Kết nối của note: outgoing/backlinks/related |
+| `/ingest` | POST | Upload PDF/DOCX/... → convert thành note (multipart) |
 | `/history/{session_id}` | GET | Lịch sử chat |
 | `/session/{session_id}` | DELETE | Xóa session |
 | `/stats` | GET | Thống kê |
@@ -167,6 +176,45 @@ curl -X POST http://localhost:8000/reindex \
   -H "Content-Type: application/json" \
   -d '{"full_reindex": true}'
 ```
+
+## MCP Server — Dùng DevMemory từ Claude/Cursor
+
+DevMemory expose knowledge base qua [Model Context Protocol](https://modelcontextprotocol.io) với 3 tool read-only:
+
+| Tool | Mô tả |
+|---|---|
+| `search_notes(query, top_k)` | Hybrid search, trả về đoạn note kèm nguồn/loại/ngày |
+| `ask(question, top_k)` | Hỏi RAG — retrieve + LLM local tổng hợp câu trả lời |
+| `related_notes(filename, top_k)` | Kết nối của note: outgoing links, backlinks, related (semantic) |
+| `list_notes(tag, limit)` | Liệt kê note kèm metadata OKF (đọc thẳng frontmatter) |
+
+Cấu hình cho Claude Desktop (`claude_desktop_config.json`) hoặc Claude Code (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "devmemory": {
+      "command": "/path/to/dev-memory/venv/bin/python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "/path/to/dev-memory"
+    }
+  }
+}
+```
+
+> **Lưu ý:** Tool đầu tiên được gọi sẽ mất ~30s để load model embedding (lazy init). Tool `ask` cần Ollama đang chạy; `search_notes`/`list_notes` thì không.
+
+## Dùng với Obsidian Vault
+
+Trỏ `NOTES_DIR` trong `.env` vào vault của bạn:
+
+```ini
+NOTES_DIR=/path/to/your-obsidian-vault
+```
+
+- Thư mục ẩn (`.obsidian/`, `.trash/`) tự động bị bỏ qua khi index.
+- Wikilink `[[note]]`, `[[note|alias]]`, `[[note#section]]` được parse và lưu vào metadata.
+- Frontmatter OKF (`type`, `tags`, `project`, `timestamp`) tương thích với Obsidian Properties.
 
 ## Format Note (.md)
 

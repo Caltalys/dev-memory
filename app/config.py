@@ -20,6 +20,10 @@ class Settings:
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:3b")
     LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    # Provider: "ollama" (native API, mặc định) hoặc "openai"
+    # (OpenAI-compatible: LM Studio, vLLM, OpenRouter, Ollama /v1, ...)
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
+    LLM_API_KEY = os.getenv("LLM_API_KEY", "")
     CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 800))
     CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 200))
     TOP_K = int(os.getenv("TOP_K", 5))
@@ -28,6 +32,9 @@ class Settings:
 
 
 settings = Settings()
+
+# Tên file dành riêng, không index như concept document (theo quy ước OKF).
+RESERVED_FILENAMES = {"template.md", "engineering_kb_template.md", "index.md", "log.md"}
 
 # Tạo thư mục nếu chưa tồn tại
 settings.NOTES_DIR.mkdir(parents=True, exist_ok=True)
